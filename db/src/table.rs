@@ -14,35 +14,40 @@ const N_BUCKETS : usize = 32;
 
 #[derive(Debug,Default)]
 pub struct Table {
-    maps: [RwLock<HashMap<BS, BS>>; N_BUCKETS],
+  id: u64,
+  maps: [RwLock<HashMap<BS, BS>>; N_BUCKETS],
 }
 
 impl Table {
-    pub fn get<'b>(&self, key: &'b [u8]) -> Option<Vec<u8>> {
-        let bucket = (key[0] & (N_BUCKETS - 1) as u8) as usize;
-        let b = self.maps[bucket].read();
-        b.get(key).map(|v| v.clone())
-    }
+  pub fn new(id: u64) -> Table {
+    Table { id, maps: Default::default() }
+  }
 
-    pub fn put(&self, key: &[u8], value: &[u8]) {
-        let bucket = (key[0] & (N_BUCKETS - 1) as u8) as usize;
-        let ins;
-        {
-            if let Some(v) = self.maps[bucket].write().get_mut(key) {
-                v.clear();
-                v.extend_from_slice(value);
-                ins = false;
-            } else {
-                ins = true;
-            }
-        }
-        if ins {
-            let mut v = Vec::new();
-            v.extend_from_slice(value);
-            // Danger about not holding lock whole time here. Need to repeat lookup for
-            // linearizable behavior (or hold lock at the top).
-            self.maps[bucket].write().insert(key.to_vec(), v);
-        }
+  pub fn get<'b>(&self, key: &'b [u8]) -> Option<Vec<u8>> {
+    let bucket = (key[0] & (N_BUCKETS - 1) as u8) as usize;
+    let b = self.maps[bucket].read();
+    b.get(key).map(|v| v.clone())
+  }
+
+  pub fn put(&self, key: &[u8], value: &[u8]) {
+    let bucket = (key[0] & (N_BUCKETS - 1) as u8) as usize;
+    let ins;
+    {
+      if let Some(v) = self.maps[bucket].write().get_mut(key) {
+        v.clear();
+        v.extend_from_slice(value);
+        ins = false;
+      } else {
+        ins = true;
+      }
     }
+    if ins {
+      let mut v = Vec::new();
+      v.extend_from_slice(value);
+      // Danger about not holding lock whole time here. Need to repeat lookup for
+      // linearizable behavior (or hold lock at the top).
+      self.maps[bucket].write().insert(key.to_vec(), v);
+    }
+  }
 }
 
