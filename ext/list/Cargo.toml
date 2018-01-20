@@ -1,0 +1,10 @@
+[package]
+name = "list"
+version = "0.1.0"
+authors = ["Aaron Langford <aaron.langford31@gmail.com>"]
+
+[lib]
+crate-type = ["dylib"]
+
+[dependencies]
+sandstorm = { path = "../../sandstorm" }

@@ -1,39 +1,37 @@
-extern crate sandstorm;
 extern crate libloading as lib;
 extern crate spin;
 
-use std::sync::{Arc};
-use self::spin::{RwLock};
+use std::sync::{Arc, RwLock};
 use std::io::Result;
 
 use std::collections::HashMap;
 
 use super::common::*;
 
-type Procedure<'lib> = lib::Symbol<'lib, unsafe extern fn(&sandstorm::DB)>;
-type ProcedureRaw = lib::os::unix::Symbol<unsafe extern fn(&sandstorm::DB)>;
+type Procedure<'lib> = lib::Symbol<'lib, unsafe extern fn(&dbcontext, BS) -> Result<BS>>;
+type ProcedureRaw = lib::os::unix::Symbol<unsafe extern fn(&dbcontext, BS) -> Result<BS>>;
 
 struct Extension {
-    library: lib::Library,
-    procedure: ProcedureRaw,
+  library: lib::Library,
+  procedure: ProcedureRaw,
 }
 
 impl Extension {
-    fn load(ext_path: &str) -> Result<Extension> {
-        let lib = lib::Library::new(ext_path)?;
-        let init: ProcedureRaw;
-        unsafe {
-            let wrapped : Procedure = lib.get(b"init").unwrap();
-            init = wrapped.into_raw();
-        }
-        Ok(Extension{library: lib, procedure: init})
+  fn load(ext_path: &str) -> Result<Extension> {
+    let lib = lib::Library::new(ext_path)?;
+    let init: ProcedureRaw;
+    unsafe {
+      let wrapped : Procedure = lib.get(b"init").unwrap();
+      init = wrapped.into_raw();
     }
+    Ok(Extension{library: lib, procedure: init})
+  }
 
-    fn call(&self, db: &sandstorm::DB) {
-        unsafe {
-            (self.procedure)(db);
-        }
+  fn call(&self, db: &dbcontext, key: BS) -> Result<BS> {
+    unsafe {
+      (self.procedure)(db, key);
     }
+  }
 }
 
 pub struct ExtensionManager {
@@ -42,7 +40,7 @@ pub struct ExtensionManager {
 
 impl ExtensionManager {
     pub fn new() -> ExtensionManager {
-        ExtensionManager{extensions: RwLock::new(HashMap::new())}
+      ExtensionManager{extensions: RwLock::new(HashMap::new())}
     }
 
     pub fn load_one_test_module(&self) {
@@ -68,7 +66,7 @@ impl ExtensionManager {
         Ok(())
     }
 
-    pub fn call(&self, db: &sandstorm::DB, _: UserId, proc_name: &str) {
+    pub fn call(&self, db: &dbcontext, _: UserId, proc_name: &str) -> Result<BS> {
         let exts = self.extensions.read();
         let ext = exts.get(proc_name).unwrap().clone();
         drop(exts);
@@ -83,8 +81,7 @@ mod tests {
 
     #[test]
     fn ext_basic() {
-        //let db = sandstorm::MockDB::new();
-        let db = sandstorm::NullDB::new();
+        let db = dbcontext::new();
         let m = ExtensionManager::new();
 
         let n = 100;
