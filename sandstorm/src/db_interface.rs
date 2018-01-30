@@ -161,14 +161,14 @@ pub trait DBInterface {
     ///             each of type T.
     fn reinterpret_opaque_as<T>(arg: [u8]) -> [T];
 
-    /// This method should return a reference to the arguments to the procedure
-    /// that were passed in by through an RPC sent by a client.
+    /// This method should return a reference to the arguments of a remote
+    /// procedure call (RPC) sent by a client.
     ///
     /// - `return`: A reference to the arguments type.
     fn read_arguments<A>() -> &A;
 
-    /// This method should write a response for the client that issued the RPC
-    /// to invoke this procedure.
+    /// This method should write a response for the client that issued the remote
+    /// procedure call (RPC).
     ///
     /// - `response`: A reference to the response to be written, passed in with
     ///               type 'R'.
