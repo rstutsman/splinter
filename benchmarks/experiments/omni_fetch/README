@@ -1,0 +1,21 @@
+Premise:
+
+A program exists that must read a set of n items from memory. Those n items are fragmented across memory, and thus cannot receive the same benefits of a contiguous access pattern that comes from hardware level prefetching.
+
+Hypothesis:
+
+Give the program described in the premise, a program that is omniscient about all memory that it must access will run faster than a program that cannot forecast it's memory access needs.
+
+Experiment:
+
+A two programs will be written to test the hypothesis, an omniscient program and a dunce program. 
+
+Both programs will build a hash map that maps 256 character strings to double precision floating point numbers. The hash map will require roughly 1 gb of memory, thus roughly 3.8 million key value pairs must exist in the hash table.
+
+Both programs will calculate the statistical varience of all floating point numbers whose key is in a predefined list. That list will simply be populated with roughly 950 thousand random keys that were selected while building the hash-map. All keys and values will be generated using a random number generator that uses the same seed across runs.
+
+The "omniscient" program will have the privilege of knowing the hash value of every key that the program must fetch "before-hand". A series of m reads will take place, followed by a series of m hashes, reads, and calculations. The pattern here is intended to simulate a software level prefetcher or speculative fetcher that can effectively predict the memory locations that will need to be loaded based on some observed pattern. Then with the prediction, this oracle would theoretically insert preemtive read operations before a compute cycle took place.
+
+The "dunce" program will simply read each value from the list of strings, and perform the computation.
+
+
