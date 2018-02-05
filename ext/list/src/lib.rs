@@ -2,93 +2,82 @@
 #![feature(no_unsafe)]
 
 extern crate db;
+extern crate sandstorm;
 
-#[no_mangle]
-pub fn init(ctx: &db::dbcontext, tableId: u64, key: Vec<u8>) -> Result<Vec<u8>> {
-  let tbl = ctx.get(tableId);
-  let alpha = tbl.get(key);
-
-  match alpha {
-    Some(node) => {
-      let alpha_node = ListNode::deserialize(node);
-      Result(find_last_elem(alpha_node))  
-    },
-    None => {
-      Result(Vec::new())
-    }
-  }
-}
-
-fn find_last_elem(first_node: ListNode, tbl: &db::Table) -> Vec<u8> {
-  let mut curr = first_node;
-  while let Some(next) = curr.next {
-    let val = tbl.get(next);
-    match val {
-      Some(node) => {
-        curr = ListNode::deserialize(node);
-      },
-      None => {
-        // this is an exception:
-        //    there was node whose next key was a key that didn't exist in the
-        //    table. This is probably a result of a broken list, as the end of
-        //    the list should be a key of zero.
-        assert!(false);
-      }
-    }
-  }
-  curr.data
-}
 
 struct ListNode {
-  next: Option<Vec<u8>>,
-  data: Vec<u8>
+  next_node_key: Option<u64>,
+  data_len: u16,
+  data: u8[65536]
 }
 
-/* List node structure in bytes:
- * [has_next, n_bytes, key..?, data..]
- */
-impl ListNode {
-  pub fn deserialize(bytes: Vec<u8>) -> ListNode {
-    assert!(bytes.len() > 2); 
-    // first byte indicates whether or not there is a next
-    let has_next = bytes[0];
-    let (next, data) = if (has_next > 0) {
-      assert!(bytes.len() > 3);
-      // if there exists a next element in the list, the second byte determins the length of the key
-      // TODO: figure out a way to allow for larger keys than a max of 255 bytes.
-      let n_bytes = bytes[1];
-      assert!(bytes.len() > 0);
-      
-      // the next n_bytes are the key
-      let key = bytes[2..n_bytes].to_vec();
+struct ListExtension {
 
-      // the remaing bytes are the data
-      let data = bytes[n_bytes..].to_vec();
+}
 
-      (Some(key), data)
-    } else {
-      (None, bytes[2..].to_vec())
-    }
-
-    ListNode { next, data }
+impl Sandstorm::Extension for ListExtension {
+  #[no_mangle]
+  pub init() {
+    // Here is a great place to set up initial state for the extension,
+    // but for now, this extension needs no initialization logic.
   }
- 
-  pub fn serialize(&self) -> Vec<u8> {
-    let mut serial = Vec::new();
-    match self.next {
-      Some(next) => {
-        serial.push(1);
-        serial.push(next.len());
-        serial.append(self.next);
-      },
-      None => {
-        serial.push(0); // does not have key
-        serial.push(0); // key size is zero
+
+  #[no_mangle]
+  pub destroy() {
+    // Here is a great place to tear down the extension's state,
+    // but for now this extension needs no de-initialization logic.
+  }
+  
+  #[no_mangle]
+  pub call(
+    db: &sandstorm::DBInterface,
+    tbl_id: u64,
+    keys: Vec<Vec<u8>>,
+    arg: Vec<u8>) -> Sandstorm::ExtensionResult {
+
+    if (keys.len() == 0) {
+      let err = "Got an empty list of keys. This extension requires exactly 1 key.";
+      Sandstorm::ExtensionResult::ERROR(String::from(err));
+    } else {
+      let result = db.get_key<u64, ListNode>(keys.get(0));
+
+      match result {
+        Sandstorm::CoreResult::SUCCESS(alpha_node) => {
+          Sandstorm::ExtensionResult::SUCESSS(find_last_elem(alpha_node))
+        },
+        Sandstorm::CoreResult::TABLE_DOES_NOT_EXIST => {
+          let err = format!("Table with id {} was not found.", tbl_id);
+          Sandstorm::ExtensionResult::ERROR(String::from(err));
+        },
+        Sandstorm::CoreResult::KEY_DOES_NOT_EXIST => {
+          let err = format!("Key {} was not found", keys.get(0));
+          Sandstorm::ExtensionResult::ERROR(String::from(err));
+        }
       }
     }
-    serial.append(self.data);
-    serial
   }
+
+}
+
+fn find_last_elem(
+  first_node: ListNode,
+  db: &sandstorm::DBInterface) -> Sandstorm::CoreResult<u8[65536]> {
+  
+  let mut curr = first_node;
+  while let Some(next) = curr.next_node_key {
+    let result = db.get_key<u64, ListNode>(next);
+    match result {
+      Sandstorm::CoreResult::SUCCESS(next) => {
+        curr = next;
+      },
+      _ => {
+
+        // There was an error, we just hot potato the error up to callee
+        return result
+      }
+    }
+  }
+  Sandstorm::CoreResult::SUCCESS(curr.data)
 }
 
 #[cfg(test)]

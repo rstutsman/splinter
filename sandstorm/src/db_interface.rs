@@ -15,13 +15,14 @@
 
 /// This type indicates to a procedure whether a call to the database
 /// succeeded or failed.
-enum SandstormErr {
+enum CoreResult<T> {
     /// This value indicates that the call succeeded.
-    SUCCESS,
-
+    SUCCESS(T),
     /// This value indicates that the call failed because the table
     /// does not exist.
     TABLE_DOES_NOT_EXIST,
+    /// Inidicates that the key was not found
+    KEY_DOES_NOT_EXIST,
 }
 
 /// Definition of the `DBInterface` trait that will allow untrusted procedures
@@ -55,7 +56,7 @@ pub trait DBInterface {
     ///               reference to this value is handed to the procedure wrapped
     ///               inside a Result<>. The Result<> is required because the
     ///               table might not contain this key.
-    fn get_key<K, V>(table_id: u64, key: &K) -> Result<&V, SandstormErr>;
+    fn get_key<K, V>(table_id: u64, key: &K) -> CoreResult<V>;
 
     /// This method should allow a procedure to lookup a key of type 'K' from
     /// the database. It should return the value as an opaque slice of bytes.
@@ -66,7 +67,7 @@ pub trait DBInterface {
     ///
     /// - `return`:   An opaque slice of bytes corresponding to the value if it
     ///               exists. This slice is wrapped up inside a Result<>.
-    fn get_key_opaque<K>(table_id: u64, key: &K) -> Result<[u8], SandstormErr>;
+    fn get_key_opaque<K>(table_id: u64, key: &K) -> CoreResult<[u8]>;
 
     /// This method should allow a procedure to lookup a list of keys, each of
     /// type 'K' from the database. It should return a list of references to the
@@ -83,7 +84,7 @@ pub trait DBInterface {
     ///               as when the table does not exist etc.
     fn get_key_list<K, V>(table_id: u64,
                           key_list: Sandstorm::Vec<&K>)
-                          -> Result<Sandstorm::Vec<Option<&V>>, SandstormErr>;
+                          -> CoreResult<Sandstorm::Vec<Option<&V>>>;
 
     /// TODO: Spec out a table iterator.
 
@@ -96,8 +97,7 @@ pub trait DBInterface {
     ///               for this closure to be a filter on the table's contents.
     fn table_filter_unordered<K, V>(table_id: u64,
                                     filter: Fn(&K, &V) -> Option<(&K, &V)>)
-                                    -> Result<Sandstorm::Vec<&K, &V>,
-                                              SandstormErr>;
+                                    -> CoreResult<Sandstorm::Vec<&K, &V>>;
 
     /// This method should write a key-value pair to a table. The key should
     /// be of type 'K', and the value should be of type 'V'.
@@ -108,7 +108,7 @@ pub trait DBInterface {
     ///
     /// - `return`:   An error code of type 'SandstormErr' indicating whether
     ///               the operation succeeded or failed.
-    fn put_key<K, V>(table_id: u64, key: &K, value: &V) -> SandstormErr;
+    fn put_key<K, V>(table_id: u64, key: &K, value: &V) -> CoreResult<bool>;
 
     /// This method should write a key-value pair to a table. The key should
     /// be of type 'K', and the value should be an opaque slice of bytes.
@@ -120,7 +120,7 @@ pub trait DBInterface {
     ///
     /// - `return`:   An error code of type 'SandstormErr' indicating whether
     ///               the operation succeeded or failed.
-    fn put_key_opaque<K>(table_id: u64, key: &K, value: [u8]) -> SandstormErr;
+    fn put_key_opaque<K>(table_id: u64, key: &K, value: [u8]) -> CoreResult<bool>;
 
     /// This method should write a list of key-value pairs to a table. Each
     /// key should be of type 'K', and each value should be of type 'V'.
@@ -133,7 +133,7 @@ pub trait DBInterface {
     /// - `return`:   An error code of type 'SandstormErr' indicating whether
     ///               the operation succeeded or failed.
     fn put_list<K, V>(table_id: u64, key_val_list: Sandstorm::Vec<(&K, &V)>)
-                      -> SandstormErr;
+                      -> CoreResult<bool>;
 
     /// This method should re-interpret a slice of objects from one type (T)
     /// into another type (U).
