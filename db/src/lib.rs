@@ -23,6 +23,8 @@ extern crate serde_derive;
 extern crate spin;
 extern crate toml;
 extern crate time;
+extern crate perfcnt;
+extern crate x86;
 
 pub extern crate bytes;
 pub extern crate e2d2;

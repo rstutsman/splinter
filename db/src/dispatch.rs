@@ -13,6 +13,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use perfcnt::linux::HardwareEventType;
+use perfcnt::linux::PerfCounterBuilderLinux;
+use perfcnt::{AbstractPerfCounter, PerfCounter};
+
 #[cfg(feature = "dispatch")]
 use std::cell::RefCell;
 use std::fmt::Display;
@@ -151,6 +155,8 @@ where
     /// stop() a code block or function call to profile the events.
     #[cfg(feature = "dispatch")]
     cycle_counter: DispatchCounters,
+
+    pc: RefCell<PerfCounter>,
 }
 
 impl<T> Dispatch<T>
@@ -246,6 +252,13 @@ where
             id: id,
             #[cfg(feature = "dispatch")]
             cycle_counter: DispatchCounters::new(),
+            pc: RefCell::new(
+                PerfCounterBuilderLinux::from_hardware_event(HardwareEventType::CacheReferences)
+                    .exclude_idle()
+                    .exclude_kernel()
+                    .finish()
+                    .expect("Could not create counter"),
+            ),
         }
     }
 
@@ -773,7 +786,9 @@ where
             // Dispatch these packets to the appropriate service.
             #[cfg(feature = "dispatch")]
             self.cycle_counter.dispatch.start();
+            self.pc.borrow_mut().start().expect("Can not start the counter");
             self.dispatch_requests(packets);
+            self.pc.borrow_mut().stop().expect("Can not stop the counter");
             #[cfg(feature = "dispatch")]
             self.cycle_counter.dispatch.stop(count as u64);
             count as u64
@@ -820,17 +835,19 @@ where
         #[cfg(feature = "dispatch")]
         COUNTER.with(|count_a| {
             let mut count = count_a.borrow_mut();
-            *count += 1;
+            *count += _count;
             let every = 1000000;
             if *count >= every {
                 info!(
-                    "Poll {}, RX-TX {}, Parse {}, Dispatch {}",
+                    "Poll {}, RX-TX {}, Parse {}, Dispatch {} {}",
                     self.cycle_counter.poll.get_average(),
                     self.cycle_counter.rx_tx.get_average(),
                     self.cycle_counter.parse.get_average(),
-                    self.cycle_counter.dispatch.get_average()
+                    self.cycle_counter.dispatch.get_average(),
+                    (self.pc.borrow_mut().read().expect("Can not read counter")/(*count)) as f64
                 );
                 *count = 0;
+                self.pc.borrow_mut().reset().expect("Can not reset the counter");
             }
         });
         return (self.state.clone(), exec);
