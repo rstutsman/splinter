@@ -1078,7 +1078,8 @@ impl Master {
                     let res = table
                         .get(key)
                         .and_then(|object| alloc.resolve(object))
-                        .and_then(|(_k, value)| {
+                        .and_then(|(k, value)| {
+                            res.add_to_payload_tail(k.len(), &k[..]).ok();
                             res.add_to_payload_tail(value.len(), &value[..]).ok()
                         });
 

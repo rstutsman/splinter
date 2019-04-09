@@ -58,6 +58,8 @@ static mut ORD_DIST: bool = false;
 static ORDER: f64 = 2500.0;
 static STD_DEV: f64 = 500.0;
 
+pub const ENABLE_MULTIGET: bool = true;
+
 // PUSHBACK benchmark.
 // The benchmark is created and parameterized with `new()`. Many threads
 // share the same benchmark instance. Each thread can call `abc()` which
@@ -378,15 +380,18 @@ where
             if self.native == true {
                 // Configured to issue native RPCs, issue a regular get()/put() operation.
                 self.workload.borrow_mut().abc(
-                    //|tenant, key, _ord| self.sender.send_get(tenant, 1, key, curr),
                     |tenant, key, _ord| {
-                        let mut keys: Vec<u8> = Vec::new();
-                        for _i in 0..self.num {
-                            keys.extend_from_slice(key);
+                        if !ENABLE_MULTIGET {
+                            self.sender.send_get(tenant, 1, key, curr);
+                        } else {
+                            let mut keys: Vec<u8> = Vec::new();
+                            for _i in 0..self.num {
+                                keys.extend_from_slice(key);
+                            }
+                            self.sender
+                                .send_multiget(tenant, 1, 30, self.num, &keys, curr)
                         }
-                        self.sender.send_multiget(tenant, 1, 30, self.num, &keys, curr)
                     },
-
                     |tenant, key, val, _ord| self.sender.send_put(tenant, 1, key, val, curr),
                 );
                 self.native_state.borrow_mut().entry(curr).or_insert(1);
@@ -562,28 +567,20 @@ where
                             let p = packet.parse_header::<MultiGetResponse>();
                             let num_records_received = p.get_header().num_records;
                             let timestamp = p.get_header().common_header.stamp;
-                            //let count = *self.native_state.borrow().get(&timestamp).unwrap();
                             if num_records_received == self.num as u32 {
-                                info!("received correct count");
+                                info!("received correct count {}", p.get_payload().len());
                                 self.recvd += 1;
                                 let start = cycles::rdtsc();
                                 while cycles::rdtsc() - start < self.ord as u64 {}
                                 self.latencies.push(cycles::rdtsc() - timestamp);
-                                //self.native_state.borrow_mut().remove(&timestamp);
+                                self.native_state.borrow_mut().remove(&timestamp);
                                 self.outstanding -= 1;
                             } else {
-                                // Send the packet with same tenantid, curr etc.
-                                /*let tenant = p.get_header().common_header.tenant;
-                                let val = p.get_payload();
-                                self.sender.send_get(tenant, 1, &val[0..30], timestamp);
-                                if let Some(count) =
-                                    self.native_state.borrow_mut().get_mut(&timestamp)
-                                {
-                                    *count += 1;
-                                }*/
+                                info!("Less number of records in multiget response");
                             }
                             p.free_packet();
                         }
+
                         _ => packet.free_packet(),
                     }
                 }
